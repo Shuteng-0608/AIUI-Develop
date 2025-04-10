@@ -1,0 +1,6 @@
+README.md
+setup.py
+src/sr_modbus_sdk.egg-info/PKG-INFO
+src/sr_modbus_sdk.egg-info/SOURCES.txt
+src/sr_modbus_sdk.egg-info/dependency_links.txt
+src/sr_modbus_sdk.egg-info/top_level.txt
