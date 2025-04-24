@@ -43,13 +43,14 @@ logger.addHandler(console_handler)
 class SocketDemo:
     def __init__(self):
         self.client_socket = None
-        self.server_ip_port = ('192.168.8.158', 19199)
+        self.server_ip_port = ('192.168.10.141', 19199) # 19199
         self.server_ip = self.server_ip_port[0]
         self.connected_event = Event()
         self.stop_event = Event()
         self.connect()
         self.start_ping_check()
         self.detected_intent = None
+        self.tts_text = ""
 
     def connect(self):
         while not self.stop_event.is_set():
@@ -151,10 +152,15 @@ class SocketDemo:
     def handle_detected_intent(self, intent):
         if intent == "SayHi":
             logging.info(f"检测到 [{intent}] 意图, 执行打招呼动作")
+            
         elif intent == "handshake":
             logging.info(f"检测到 [{intent}] 意图, 执行握手动作")
         elif intent == "LabTour":
             logging.info(f"检测到 [{intent}] 意图, 执行实验室游览动作")
+        elif intent == "Bow":
+            logging.info(f"检测到 [{intent}] 意图, 执行鞠躬欢送动作")
+        elif intent == "Nod":
+            logging.info(f"检测到 [{intent}] 意图, 执行点头动作")
 
 
     def get_nlp_result(self, data):
@@ -177,9 +183,16 @@ class SocketDemo:
             try:
                 # if parsed_data.get('intent', {}).get('semantic', [])
                 self.detected_intent = parsed_data.get('intent', {}).get('semantic', {})[0].get('intent', {})
+                self.tts_text = parsed_data.get('intent', {}).get('answer',{}).get('text')
             except (IndexError, AttributeError, TypeError, KeyError) as e:
                 self.detected_intent = None
+                self.tts_text = ""
                 logging.debug(f"语义解析小异常: {str(e)}")
+            
+            if self.tts_text:
+                logging.info(f"成功提取回答: {self.tts_text}")
+            else:
+                logging.info(f"未成功提取回答")
 
             if self.detected_intent:
                 logging.info(f"成功提取意图: {self.detected_intent}")
@@ -230,6 +243,10 @@ class SocketDemo:
             check_code = msg_data[-1]
 
             if sync_head == 0xa5 and user_id == 0x01:
+                # success, result = AiuiMessageProcess().process(self.client_socket, msg)
+                # logging.info(f"msg_type: {msg_type} ")
+                # logging.info(f"收到数据: {result} ")
+
                 if msg_type == 0x01:
                     ConfirmProcess().process(self.client_socket, msg_id)
                 elif msg_type == 0x04:
@@ -240,6 +257,11 @@ class SocketDemo:
                         data = json.loads(result)
                         self.get_aiui_type(data)
                         # logging.info(f"AIUI message processed successfully: {result.decode('utf-8')}")
+                        
+                            
+                        if data.get('content', {}).get('eventType', {}) == 4:
+                            logging.info(f"唤醒成功：==== 我在 ==== ")
+                            AiuiTTS().process(self.client_socket, msg_id, '我在')
                         if (self.aiui_type == "iat"):
                             self.get_iat_result(data)
 

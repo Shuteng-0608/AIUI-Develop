@@ -1,4 +1,3 @@
-#! /usr/bin/env python
 import struct
 import logging
 import time
@@ -8,8 +7,39 @@ import signal
 from processStrategy import *
 from threading import Thread, Event
 import subprocess
+from enum import Enum
 
-import rospy
+class AIUIMessage(Enum):
+    CMD_GET_STATE = 1
+    CMD_WRITE = 2
+    CMD_STOP_WRITE = 3
+    CMD_START = 5
+    CMD_STOP = 6
+    CMD_WAKEUP = 7
+    CMD_RESET_WAKEUP = 8
+    CMD_SET_PARAMS = 10
+    CMD_SYNC = 13
+    CMD_RESULT_VALIDATION_ACK = 20
+    CMD_CLEAN_DIALOG_HISTORY = 21
+    CMD_START_RECORD = 22
+    CMD_STOP_RECORD = 23
+    CMD_QUERY_SYNC_STATUS = 24
+    CMD_TTS = 27
+
+class AIUIEvent(Enum):
+    EVENT_RESULT = 1
+    EVENT_ERROR = 2
+    EVENT_STATE = 3
+    EVENT_WAKEUP = 4
+    EVENT_SLEEP = 5
+    EVENT_VAD = 6
+    EVENT_CMD_RETURN = 8
+    EVENT_PRE_SLEEP = 10
+    EVENT_START_RECORD = 11
+    EVENT_STOP_RECORD = 12
+    EVENT_CONNECTED_TO_SERVER = 13
+    EVENT_SERVER_DISCONNECTED = 14
+    EVENT_TTS = 15
 
 
 def stop_handle(sig, frame):
@@ -42,14 +72,15 @@ console_handler.setFormatter(console_formatter)
 # logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
-class SocketDemo(Thread):
+
+class SocketDemo:
     def __init__(self):
-        super.__init__()
         self.client_socket = None
-        self.server_ip_port = ('192.168.8.141', 19199)
+        self.server_ip_port = ('192.168.8.158', 19199)
         self.server_ip = self.server_ip_port[0]
         self.connected_event = Event()
         self.stop_event = Event()
+        self.wakeup_event = Event()
         self.connect()
         self.start_ping_check()
         self.detected_intent = None
@@ -59,7 +90,7 @@ class SocketDemo(Thread):
             try:
                 if self.client_socket:
                     self.client_socket.close()
-                self.client_socket = socket(AF_INET, SOCK_STREAM)
+                self.client_socket = socket(AF_INET, SOCK_STREAM) # IPv4, TCP
                 self.client_socket.settimeout(5)  # 设置连接超时
                 self.client_socket.connect(self.server_ip_port)
                 logging.info(f"Connected to {self.server_ip_port}")
@@ -154,20 +185,10 @@ class SocketDemo(Thread):
     def handle_detected_intent(self, intent):
         if intent == "SayHi":
             logging.info(f"检测到 [{intent}] 意图, 执行打招呼动作")
-            # client = rospy.ServiceProxy("Srv_name",SrvType)
-            # req = SrvTypeRequest()
-            # req.request = 
-            # client.wait_for_service()
-            # client.call(req)
-            # client.close()
         elif intent == "handshake":
             logging.info(f"检测到 [{intent}] 意图, 执行握手动作")
         elif intent == "LabTour":
             logging.info(f"检测到 [{intent}] 意图, 执行实验室游览动作")
-        elif intent == "Bow":
-            logging.info(f"检测到 [{intent}] 意图, 执行鞠躬欢送动作")
-        elif intent == "Nod":
-            logging.info(f"检测到 [{intent}] 意图, 执行点头动作")
 
 
     def get_nlp_result(self, data):
@@ -200,6 +221,9 @@ class SocketDemo(Thread):
             else:
                 logging.info("未检测到预设动作指令意图")
 
+    
+        
+        
     def get_intent_result(self, data):
         # intent_data = data.get('content', {}).get('result', {}).get()
         text_value = data.get('content', {}).get(
@@ -209,14 +233,6 @@ class SocketDemo(Thread):
         if (rc == 0):
             category = intent.get('category', "")
             logging.info(f"技能结果: {category} ")
-
-    def run(self):
-        try:
-            while run:
-                demo.process()
-        finally:
-            demo.close()
-            logging.info("Program terminated")
 
     def process(self):
         try:
@@ -248,10 +264,6 @@ class SocketDemo(Thread):
             check_code = msg_data[-1]
 
             if sync_head == 0xa5 and user_id == 0x01:
-                # success, result = AiuiMessageProcess().process(self.client_socket, msg)
-                # logging.info(f"msg_type: {msg_type} ")
-                # logging.info(f"收到数据: {result} ")
-
                 if msg_type == 0x01:
                     ConfirmProcess().process(self.client_socket, msg_id)
                 elif msg_type == 0x04:
@@ -262,9 +274,6 @@ class SocketDemo(Thread):
                         data = json.loads(result)
                         self.get_aiui_type(data)
                         # logging.info(f"AIUI message processed successfully: {result.decode('utf-8')}")
-
-                        if data.get('content', {}).get('eventType', {}) == 4:
-                            logging.info(f"唤醒成功：==== 我在 ==== ")
                         if (self.aiui_type == "iat"):
                             self.get_iat_result(data)
 
@@ -290,10 +299,10 @@ class SocketDemo(Thread):
 
 
 if __name__ == '__main__':
-    rospy.init_node("AIUI_node")
-    
     demo = SocketDemo()
-    demo.start()
-
-    rospy.spin()
-    
+    try:
+        while run:
+            demo.process()
+    finally:
+        demo.close()
+        logging.info("Program terminated")
