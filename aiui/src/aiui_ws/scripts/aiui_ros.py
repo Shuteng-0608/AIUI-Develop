@@ -8,8 +8,9 @@ import signal
 from processStrategy import *
 from threading import Thread, Event
 import subprocess
-
+from sr_modbus_sdk import *
 import rospy
+from aiui_ws.srv import TTS, TTSRequest, TTSResponse
 
 
 def stop_handle(sig, frame):
@@ -46,13 +47,14 @@ class SocketDemo(Thread):
     def __init__(self):
         super().__init__()
         self.client_socket = None
-        self.server_ip_port = ('192.168.8.141', 19199)
+        self.server_ip_port = ('192.168.10.141', 19199)
         self.server_ip = self.server_ip_port[0]
         self.connected_event = Event()
         self.stop_event = Event()
         self.connect()
         self.start_ping_check()
         self.detected_intent = None
+        self.tts_text = ""
 
     def connect(self):
         while not self.stop_event.is_set():
@@ -150,6 +152,15 @@ class SocketDemo(Thread):
         if (result_string != "" or status_value == 2):
             print(f"识别结果是: {result_string} {status_value}")
 
+
+    def labTour(self, start, end):
+        mb_server = SRModbusSdk()
+        mb_server.connect_tcp('192.168.10.141')
+        for i in range(start, end+1):
+            mb_server.move_to_station_no(i, 1)
+            mb_server.wait_movement_task_finish(1) 
+
+
     def handle_detected_intent(self, intent):
         if intent == "SayHi":
             print(f"检测到 [{intent}] 意图, 执行打招呼动作")
@@ -163,6 +174,7 @@ class SocketDemo(Thread):
             print(f"检测到 [{intent}] 意图, 执行握手动作")
         elif intent == "LabTour":
             print(f"检测到 [{intent}] 意图, 执行实验室游览动作")
+            # self.labTour()
         elif intent == "Bow":
             print(f"检测到 [{intent}] 意图, 执行鞠躬欢送动作")
         elif intent == "Nod":
@@ -189,9 +201,23 @@ class SocketDemo(Thread):
             try:
                 # if parsed_data.get('intent', {}).get('semantic', [])
                 self.detected_intent = parsed_data.get('intent', {}).get('semantic', {})[0].get('intent', {})
+                self.tts_text = parsed_data.get('intent', {}).get('answer',{}).get('text')
             except (IndexError, AttributeError, TypeError, KeyError) as e:
                 self.detected_intent = None
+                self.tts_text = ""
                 logging.debug(f"语义解析小异常: {str(e)}")
+
+            if self.tts_text:
+                logging.info(f"成功提取回答: {self.tts_text}")
+                client = rospy.ServiceProxy("tts_service",TTS)
+                req = TTSRequest()
+                req.request = self.tts_text
+                client.wait_for_service()
+                client.call(req)
+                client.close()
+
+            else:
+                logging.info(f"未成功提取回答")
 
             if self.detected_intent:
                 print(f"成功提取意图: {self.detected_intent}")
@@ -265,6 +291,13 @@ class SocketDemo(Thread):
 
                         if data.get('content', {}).get('eventType', {}) == 4:
                             print(f"唤醒成功：==== 我在 ==== ")
+                            client = rospy.ServiceProxy("tts_service",TTS)
+                            req = TTSRequest()
+                            req.request = "我在！"
+                            client.wait_for_service()
+                            client.call(req)
+                            client.close()
+                            # AiuiTTS().tts(self.client_socket, msg_id, "我在")
                         if (self.aiui_type == "iat"):
                             self.get_iat_result(data)
 
