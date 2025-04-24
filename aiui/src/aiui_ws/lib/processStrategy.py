@@ -58,9 +58,3 @@ class AiuiMessageProcess(ProcessStrategy):
         except zlib.error as e:
             return False, bytearray()
 
-
-# # 语音合成播报
-# class AiuiTTS(ProcessStrategy):
-#     def tts(self, client_socket, msg_id, tts_text):
-#         send_data = self.makepacket(msg_id, 0x1B, tts_text)
-#         client_socket.send(send_data)
