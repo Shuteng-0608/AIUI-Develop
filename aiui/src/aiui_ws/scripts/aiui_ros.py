@@ -5,13 +5,13 @@ import time
 import json
 from socket import *
 import signal
-from processStrategy import *
+from processStrategy import AiuiMessageProcess, ConfirmProcess
 from threading import Thread, Event
 import subprocess
-from sr_modbus_sdk import *
+from sr_modbus_sdk import SRModbusSdk
 import rospy
-from aiui_ws.srv import TTS, TTSRequest, TTSResponse
-
+from aiui.srv import TTS, TTSRequest, TTSResponse
+from aiui.srv import VLMProcess, VLMProcessRequest, VLMProcessResponse
 
 def stop_handle(sig, frame):
     global run
@@ -166,7 +166,7 @@ class SocketDemo(Thread):
             print(f"检测到 [{intent}] 意图, 执行打招呼动作")
             # client = rospy.ServiceProxy("Srv_name",SrvType)
             # req = SrvTypeRequest()
-            # req.request = 
+            # req.request = # TODO: 填写请求参数
             # client.wait_for_service()
             # client.call(req)
             # client.close()
@@ -179,6 +179,23 @@ class SocketDemo(Thread):
             print(f"检测到 [{intent}] 意图, 执行鞠躬欢送动作")
         elif intent == "Nod":
             print(f"检测到 [{intent}] 意图, 执行点头动作")
+        elif intent == "VLM":
+            print(f"检测到 [{intent}] 意图, 执行描述动作")
+            client = rospy.ServiceProxy("vlm_service",VLMProcess)
+            req = VLMProcessRequest()
+            req.request = "我手上拿得是啥" 
+            client.wait_for_service()
+            resp = client.call(req)
+            vlm_result = resp.vlm_result
+            print(f"VLM 结果: {vlm_result}")
+            client.close()
+            client = rospy.ServiceProxy("tts_service",TTS)
+            req = TTSRequest()
+            req.request = vlm_result
+            client.wait_for_service()
+            client.call(req)
+            client.close()
+
 
 
     def get_nlp_result(self, data):

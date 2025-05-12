@@ -1,15 +1,18 @@
 #!/usr/bin/env python
-
+# -*- coding:utf-8 -*-
+import json
 import rospy
-from aiui_ws.srv import VLMProcess, VLMProcessResponse
+from aiui.srv import VLMProcess, VLMProcessResponse
 import requests
 import base64
 import os
+import ast
+
 
 class VLMServiceServer:
     def __init__(self):
         # 从ROS参数服务器获取配置参数
-        self.image_path = rospy.get_param('~image_path', '/default/path/to/image.jpg')
+        self.image_path = rospy.get_param('~image_path', '/home/whc/aiui_ws/src/aiui/img/image01.jpg')
         self.api_url = rospy.get_param('~api_url', 'http://172.18.35.200:8000/uploads/vlm_queries')
         
         # 初始化服务
@@ -31,6 +34,7 @@ class VLMServiceServer:
         payload = {
             "image": encoded_image,
             "prompt": req.prompt
+            
         }
 
         # 发送API请求
@@ -38,7 +42,17 @@ class VLMServiceServer:
             response = requests.post(self.api_url, json=payload, timeout=10)
             if response.status_code == 200:
                 result = response.json().get("read_message", "No valid result returned")
-                return VLMProcessResponse(result)
+                
+                resp = VLMProcessResponse()
+                resp.vlm_result = result[0] if isinstance(result, list) and len(result) > 0 else result
+                resp.vlm_result = ast.literal_eval(f'"{resp.vlm_result}"')
+                print(result[0])
+                
+                # resp.vlm_result = result[0]
+
+               
+                return resp
+                
             else:
                 error_msg = f"API request failed with code {response.status_code}: {response.text}"
                 rospy.logerr(error_msg)
