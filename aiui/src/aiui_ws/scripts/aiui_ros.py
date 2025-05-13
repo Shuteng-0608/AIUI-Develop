@@ -314,6 +314,16 @@ class SocketDemo(Thread):
                             client.wait_for_service()
                             client.call(req)
                             client.close()
+                            if data.get('content', {}).get('eventType', {}) == 1:
+                                try:
+                                    angle = data["content"]["result"]["ivw"]["angle"]
+                                    print(f"提取成功! angle 值为: {angle}")
+                                    self.angle = angle
+                                except KeyError as e:
+                                    # print(f"字段路径错误，缺失关键字段: {e}")
+                                    pass
+                                except json.JSONDecodeError:
+                                    print("JSON 格式解析失败")
                             # AiuiTTS().tts(self.client_socket, msg_id, "我在")
                         if (self.aiui_type == "iat"):
                             self.get_iat_result(data)
