@@ -1,12 +1,12 @@
 #! /usr/bin/env python
 
 import rospy
-from aiui_ws.srv import TTS, TTSRequest, TTSResponse
-
+from aiui.srv import TTS, TTSRequest, TTSResponse
+import pygame
 import requests
 from playsound import playsound
 import os
-
+# pip3 install ws4py
 from ws4py.client.threadedclient import WebSocketClient
 import base64
 import hashlib
@@ -37,10 +37,22 @@ class WsapiClient(WebSocketClient):
         pass
 
     def closed(self, code, reason=None):
-        if code == 1000:
-            print("连接正常关闭")
-        else:
-            print("连接异常关闭,code:" + str(code) + " ,reason:" + str(reason))
+        try:
+            if code == 1000:
+                rospy.loginfo(f"WebSocket 连接正常关闭 (code={code})")
+            else:
+                rospy.logwarn(f"WebSocket 连接异常关闭 (code={code}, reason={reason})")
+                
+        except Exception as e:
+            rospy.logerr(f"处理 WebSocket 关闭时发生意外错误: {str(e)}")
+            
+        finally:
+            # 确保资源释放（如果有需要清理的操作）
+            self.sock = None
+        # if code == 1000:
+        #     rospy.loginfo("连接正常关闭")
+        # else:
+        #     rospy.logerr("连接异常关闭,code:" + str(code) + " ,reason:" + str(reason))
 
     def received_message(self, m):
         s = json.loads(str(m))
@@ -68,30 +80,39 @@ class WsapiClient(WebSocketClient):
                 
             # 数据发送结束之后发送结束标识
             self.send(bytes(end_tag.encode("utf-8")))
-            print("发送结束标识")
+            rospy.loginfo("发送结束标识")
 
         elif s['action'] == "result":
             data = s['data']
             if data['sub'] == "iat":
-                print("user: ", data["text"])
+                rospy.loginfo("user: ", data["text"])
             elif data['sub'] == "nlp":
                 intent = data['intent']
                 if intent['rc'] == 0:
-                    print("server: ", intent['answer']['text'])
+                    rospy.loginfo("server: ", intent['answer']['text'])
                 else:
-                    print("我没有理解你说的话啊")
+                    rospy.loginfo("我没有理解你说的话啊")
             elif data['sub'] == "tts":
                 # TODO 播报pcm音频
                 tts_url = base64.b64decode(data['content']).decode()
-                print("tts: " + tts_url)
+                rospy.loginfo("tts: " + tts_url)
                 download_and_play_tts(tts_url)
         else:
-            print(s)
+            rospy.loginfo(s)
 
 
 def get_auth_id():
     mac = uuid.UUID(int=uuid.getnode()).hex[-12:]
     return hashlib.md5(":".join([mac[e:e + 2] for e in range(0, 11, 2)]).encode("utf-8")).hexdigest()
+
+
+def play_audio(file_path):
+    pygame.mixer.init()
+    pygame.mixer.music.load(file_path)
+    pygame.mixer.music.play()
+    while pygame.mixer.music.get_busy():  # 等待播放结束
+        pygame.time.Clock().tick(10)
+
 
 def download_and_play_tts(url):
     try:
@@ -104,16 +125,16 @@ def download_and_play_tts(url):
         with open(temp_file, 'wb') as f:
             f.write(response.content)
         
-        print(f"已下载TTS音频到: {temp_file}")
+        rospy.loginfo(f"已下载TTS音频到: {temp_file}")
         
         # 播放音频
-        playsound(temp_file)
-        
+        # playsound(temp_file)
+        play_audio(temp_file)
         # 删除临时文件（可选）
         os.remove(temp_file)
         
     except Exception as e:
-        print(f"下载或播放音频时出错: {e}")
+        rospy.logerr(f"下载或播放音频时出错: {e}")
 
 
 
@@ -193,6 +214,7 @@ if __name__ == "__main__":
     rospy.init_node("aiui_tts_server_node")
     # 3.创建服务对象
     server = rospy.Service("tts_service", TTS, handle_tts_request)
+    rospy.loginfo("AIUI TTS service is ready.")
     # 4.回调函数处理请求并产生响应
     # 5.spin 函数
     rospy.spin()

@@ -12,6 +12,7 @@ from sr_modbus_sdk import SRModbusSdk
 import rospy
 from aiui.srv import TTS, TTSRequest, TTSResponse
 from aiui.srv import VLMProcess, VLMProcessRequest, VLMProcessResponse
+from aiui.srv import StringService, StringServiceRequest, StringServiceResponse
 
 def stop_handle(sig, frame):
     global run
@@ -47,7 +48,7 @@ class SocketDemo(Thread):
     def __init__(self):
         super().__init__()
         self.client_socket = None
-        self.server_ip_port = ('192.168.10.141', 19199)
+        self.server_ip_port = ('192.168.8.141', 19199)
         self.server_ip = self.server_ip_port[0]
         self.connected_event = Event()
         self.stop_event = Event()
@@ -55,6 +56,12 @@ class SocketDemo(Thread):
         self.start_ping_check()
         self.detected_intent = None
         self.tts_text = ""
+        self.wakeup_state = False
+        self.arm_client = rospy.ServiceProxy("aris_node/cmd_str_srv",StringService)
+        self.vlm_client = rospy.ServiceProxy("vlm_service",VLMProcess)
+        self.tts_client = rospy.ServiceProxy("tts_service",TTS)
+
+
 
     def connect(self):
         while not self.stop_event.is_set():
@@ -164,37 +171,69 @@ class SocketDemo(Thread):
     def handle_detected_intent(self, intent):
         if intent == "SayHi":
             print(f"检测到 [{intent}] 意图, 执行打招呼动作")
-            # client = rospy.ServiceProxy("Srv_name",SrvType)
-            # req = SrvTypeRequest()
-            # req.request = # TODO: 填写请求参数
-            # client.wait_for_service()
-            # client.call(req)
+            # client = rospy.ServiceProxy("cmd_str_srv",StringService)
+            # self.arm_client = rospy.ServiceProxy("cmd_str_srv",StringService)
+            req = StringServiceRequest()
+            req.request = '3'
+            self.arm_client.wait_for_service()
+
+            # self.arm_client.call(req)
+            Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
+
             # client.close()
         elif intent == "handshake":
             print(f"检测到 [{intent}] 意图, 执行握手动作")
+            # client = rospy.ServiceProxy("cmd_str_srv",StringService)
+            req = StringServiceRequest()
+            req.request = '4' # TODO
+            self.arm_client.wait_for_service()
+            # self.arm_client.call(req)
+            Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
+
+            # client.close()
         elif intent == "LabTour":
             print(f"检测到 [{intent}] 意图, 执行实验室游览动作")
+            # mb_server = SRModbusSdk()
+            # mb_server.connect_tcp('192.168.10.141')
+            # mb_server.move_to_station_no(2, 1)
+            # mb_server.wait_movement_task_finish(1) 
             # self.labTour()
         elif intent == "Bow":
             print(f"检测到 [{intent}] 意图, 执行鞠躬欢送动作")
-        elif intent == "Nod":
-            print(f"检测到 [{intent}] 意图, 执行点头动作")
-        elif intent == "VLM":
+            # client = rospy.ServiceProxy("cmd_str_srv",StringService)
+            req = StringServiceRequest()
+            req.request = '5' # TODO
+            self.arm_client.wait_for_service()
+            # self.arm_client.call(req)
+            Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
+
+            # client.close()
+        # elif intent == "Nod":
+        #     print(f"检测到 [{intent}] 意图, 执行点头动作")
+        #     # client = rospy.ServiceProxy("cmd_str_srv",StringService)
+        #     req = StringServiceRequest()
+        #     req.request = '2' # TODO
+        #     self.arm_client.wait_for_service()
+        #     # self.arm_client.call(req)
+        #     Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
+        #     # client.close()
+        elif intent == "vlm":
             print(f"检测到 [{intent}] 意图, 执行描述动作")
-            client = rospy.ServiceProxy("vlm_service",VLMProcess)
+            # client = rospy.ServiceProxy("vlm_service",VLMProcess)
             req = VLMProcessRequest()
-            req.request = "我手上拿得是啥" 
-            client.wait_for_service()
-            resp = client.call(req)
+            req.prompt = self.tts_text 
+            self.vlm_client.wait_for_service()
+            resp = self.vlm_client.call(req)
             vlm_result = resp.vlm_result
             print(f"VLM 结果: {vlm_result}")
-            client.close()
-            client = rospy.ServiceProxy("tts_service",TTS)
+            # client.close()
+            # 语音合成 VLM 结果
+            # client = rospy.ServiceProxy("tts_service",TTS)
             req = TTSRequest()
             req.request = vlm_result
-            client.wait_for_service()
-            client.call(req)
-            client.close()
+            self.tts_client.wait_for_service()
+            self.tts_client.call(req)
+            # client.close()
 
 
 
@@ -224,14 +263,18 @@ class SocketDemo(Thread):
                 self.tts_text = ""
                 logging.debug(f"语义解析小异常: {str(e)}")
 
+            
+
             if self.tts_text:
                 logging.info(f"成功提取回答: {self.tts_text}")
-                client = rospy.ServiceProxy("tts_service",TTS)
+                # client = rospy.ServiceProxy("tts_service",TTS)
                 req = TTSRequest()
                 req.request = self.tts_text
-                client.wait_for_service()
-                client.call(req)
-                client.close()
+                self.tts_client.wait_for_service()
+
+                # self.arm_client.call(req)
+                Thread(target=self.tts_client.call, args=(req,), daemon=True).start()
+                # client.close()
 
             else:
                 logging.info(f"未成功提取回答")
@@ -241,6 +284,8 @@ class SocketDemo(Thread):
                 self.handle_detected_intent(self.detected_intent)
             else:
                 print("未检测到预设动作指令意图")
+
+            
 
     def get_intent_result(self, data):
         # intent_data = data.get('content', {}).get('result', {}).get()
@@ -254,6 +299,7 @@ class SocketDemo(Thread):
 
     def run(self):
         try:
+
             print("Program started")
             while run:
                 demo.process()
@@ -306,25 +352,28 @@ class SocketDemo(Thread):
                         self.get_aiui_type(data)
                         # print(f"AIUI message processed successfully: {result.decode('utf-8')}")
 
-                        if data.get('content', {}).get('eventType', {}) == 4:
-                            print(f"唤醒成功：==== 我在 ==== ")
+                        if data.get('content', {}).get('eventType', {}) == 5:
+                            self.wakeup_state = False
+                            print(f"唤醒结束：==== 我不在 ==== ")
                             client = rospy.ServiceProxy("tts_service",TTS)
                             req = TTSRequest()
-                            req.request = "我在！"
+                            req.request = "我先退下啦！"
                             client.wait_for_service()
                             client.call(req)
                             client.close()
-                            if data.get('content', {}).get('eventType', {}) == 1:
-                                try:
-                                    angle = data["content"]["result"]["ivw"]["angle"]
-                                    print(f"提取成功! angle 值为: {angle}")
-                                    self.angle = angle
-                                except KeyError as e:
-                                    # print(f"字段路径错误，缺失关键字段: {e}")
-                                    pass
-                                except json.JSONDecodeError:
-                                    print("JSON 格式解析失败")
-                            # AiuiTTS().tts(self.client_socket, msg_id, "我在")
+
+                        if data.get('content', {}).get('eventType', {}) == 4:
+                            
+                            if self.wakeup_state == False:
+                                self.wakeup_state = True
+                                print(f"唤醒成功：==== 我在 ==== ")
+                                client = rospy.ServiceProxy("tts_service",TTS)
+                                req = TTSRequest()
+                                req.request = "我在！"
+                                client.wait_for_service()
+                                client.call(req)
+                                client.close()
+                            
                         if (self.aiui_type == "iat"):
                             self.get_iat_result(data)
 
