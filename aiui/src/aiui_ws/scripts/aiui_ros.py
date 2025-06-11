@@ -13,6 +13,8 @@ import rospy
 from aiui.srv import TTS, TTSRequest, TTSResponse
 from aiui.srv import VLMProcess, VLMProcessRequest, VLMProcessResponse
 from aiui.srv import StringService, StringServiceRequest, StringServiceResponse
+from aiui.srv import DH5SetPosition, DH5SetPositionRequest, DH5SetPositionResponse
+from std_msgs.msg import String
 
 def stop_handle(sig, frame):
     global run
@@ -60,6 +62,7 @@ class SocketDemo(Thread):
         self.arm_client = rospy.ServiceProxy("aris_node/cmd_str_srv",StringService)
         self.vlm_client = rospy.ServiceProxy("vlm_service",VLMProcess)
         self.tts_client = rospy.ServiceProxy("tts_service",TTS)
+        self.dh5_client = rospy.ServiceProxy("/dh5/set_all_position",DH5SetPosition)
 
 
 
@@ -175,10 +178,10 @@ class SocketDemo(Thread):
             # self.arm_client = rospy.ServiceProxy("cmd_str_srv",StringService)
             req = StringServiceRequest()
             req.request = '3'
-            self.arm_client.wait_for_service()
+            # self.arm_client.wait_for_service()
 
             # self.arm_client.call(req)
-            Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
+            # Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
 
             # client.close()
         elif intent == "handshake":
@@ -186,9 +189,14 @@ class SocketDemo(Thread):
             # client = rospy.ServiceProxy("cmd_str_srv",StringService)
             req = StringServiceRequest()
             req.request = '4' # TODO
-            self.arm_client.wait_for_service()
+            # self.arm_client.wait_for_service()
             # self.arm_client.call(req)
-            Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
+            dh5_req = DH5SetPositionRequest()
+            dh5_req.hand_type = 'right'  # 1 for right hand, 2 for left hand
+            dh5_req.positions = [800, 1500, 1500, 1500, 1500, 800]  # TODO for handshake position
+            self.dh5_client.wait_for_service()
+            Thread(target=self.dh5_client.call, args=(dh5_req,), daemon=True).start()
+            # Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
 
             # client.close()
         elif intent == "LabTour":
@@ -203,9 +211,9 @@ class SocketDemo(Thread):
             # client = rospy.ServiceProxy("cmd_str_srv",StringService)
             req = StringServiceRequest()
             req.request = '5' # TODO
-            self.arm_client.wait_for_service()
+            # self.arm_client.wait_for_service()
             # self.arm_client.call(req)
-            Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
+            # Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
 
             # client.close()
         # elif intent == "Nod":
