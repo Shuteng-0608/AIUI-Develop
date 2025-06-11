@@ -1,0 +1,4 @@
+string hand_type   # 'right' or 'left'
+int16[] positions  # Array of 6 position values
+---
+int8 result        # 0 for success, -1 for failure
