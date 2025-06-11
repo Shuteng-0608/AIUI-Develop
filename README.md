@@ -5,8 +5,8 @@ roslaunch orb[TAB] ge[TAB]_3[TAB]
 
 cd aiui_ws  
 sd  
-roslaunch aiui ser[TAB]  
+roslaunch aiui service.launch  
 
 cd aiui_ws  
 sd  
-rosrun aiui aiui_r[TAB]  
+rosrun aiui aiui_ros  
