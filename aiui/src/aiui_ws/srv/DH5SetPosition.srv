@@ -1,4 +1,10 @@
-string hand_type   # 'right' or 'left'
-int16[] positions  # Array of 6 position values
+string hand_type        # 'right' or 'left'
+string hand_mode        # 'hand' or 'gripper'
+string gripper_state    # 'open' or 'close'
+int16[] position_list   # Array of 6 position values
+int16[] axis_list       # Array of 6 axis values
+int16[] force_list      # Array of 6 force values
+int16[] speed_list      # Array of 6 velocity values
+int16[] acc_list        # Array of 6 acceleration values
 ---
-int8 result        # 0 for success, -1 for failure
+int8 result             # 0 for success, -1 for failure
