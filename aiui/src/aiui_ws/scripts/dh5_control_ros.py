@@ -10,9 +10,6 @@ import numpy as np
 import time
 
 class DH5ModbusAPI:
-    # 原有的类实现保持不变（此处省略完整类实现以节省篇幅）
-    # 完整的类实现应与问题中的代码相同
-    # ...
     SUCCESS = 0
     ERROR_CONNECTION_FAILED = 1
     ERROR_INVALID_RESPONSE = 2
@@ -221,6 +218,7 @@ class DH5ModbusAPI:
             position_list = self.clamp_list(position_list, position_limits_right)
         if self.port == '/dev/ttyUSB1':
             # Left hand
+            position_list = self.err_comp(position_list)
             position_list = self.clamp_list(position_list, position_limits_left)
 
         return self.send_modbus_command(function_code=0x10,
@@ -288,7 +286,7 @@ class DH5ModbusAPI:
                                         data=force_list,
                                         data_length=len(axis_list))
 
-    def set_all(self, axis_list, position_list, force_list, speed_list,  acc_list):
+    def set_all(self, position_list, axis_list=None, force_list=None, speed_list=None, acc_list=None):
         """
         设置所有关节的目标位置、速度、力、加速度
         :param axis_list: 关节列表
@@ -298,6 +296,14 @@ class DH5ModbusAPI:
         :param acc_list: 加速度列表
         :return:
         """
+        if axis_list is None or [0]:
+            axis_list = [1, 2, 3, 4, 5, 6]
+        if force_list is None or [0]:
+            force_list = [100, 100, 100, 100, 100, 100]
+        if speed_list is None or [0]:
+            speed_list = [50, 50, 50, 50, 50, 50]
+        if acc_list is None or [0]:
+            acc_list = [100, 100, 100, 100, 100, 100]
         for axis in axis_list:
             if axis < 1 or axis > 6:
                 return self.ERROR_INVALID_COMMAND
@@ -305,10 +311,16 @@ class DH5ModbusAPI:
         force_register_address = 0x0107
         speed_register_address = 0x010D
         acc_register_address = 0x0113
+        if self.port == '/dev/ttyUSB0':
+            # Right hand
+            position_list = self.clamp_list(position_list, position_limits_right)
+        if self.port == '/dev/ttyUSB1':
+            # Left hand
+            position_list = self.clamp_list(self.err_comp(position_list), position_limits_left)
         complete_list = position_list + force_list + speed_list + acc_list
         return self.send_modbus_command(function_code=0x10,
                                         register_address=position_register_address,
-                                        data=position_list,
+                                        data=complete_list,
                                         data_length=len(complete_list))
 
     def get_all_feedback(self):
@@ -432,14 +444,14 @@ class DH5ModbusAPI:
         """
         if gesture not in gesture_list:
             return self.ERROR_INVALID_COMMAND
-        if self.port == '/dev/ttyUSB1':
-            self.set_all_position(self.err_comp(gesture_list["FIVE"]))
-            time.sleep(0.5)
-            self.set_all_position(self.err_comp(gesture_list[gesture]))
-        if self.port == '/dev/ttyUSB0':
-            self.set_all_position(gesture_list["FIVE"])
-            time.sleep(0.5)
-            self.set_all_position(gesture_list[gesture])
+        # if self.port == '/dev/ttyUSB1':
+        #     self.set_all_position(self.err_comp(gesture_list["FIVE"]))
+        #     time.sleep(0.5)
+        #     self.set_all_position(self.err_comp(gesture_list[gesture]))
+        # if self.port == '/dev/ttyUSB0':
+        self.set_all_position(gesture_list["FIVE"])
+        time.sleep(0.5)
+        self.set_all_position(gesture_list[gesture])
 
     def demo(self):
         for j in range(1, 100):
@@ -447,21 +459,49 @@ class DH5ModbusAPI:
             self.perform(gesture_name)
             print(f"Perform {j}: {gesture_name}")
             time.sleep(0.5)
+    
+    def gripper(self, state):
+        if state == "open":
+            # == OPEN == #
+            result = self.set_all([930, 1770, 1707, 1730, 1730, 980], speed_list=[30, 30, 30, 30, 30, 30])
+        elif state == "close":
+            # == CLOSE == #
+            result = self.set_all([300, 500, 500, 500, 500, 400], speed_list=[100, 30, 30, 30, 30, 30])
+        else:
+            result = 2
+        return result
+
 
 def handle_set_position(req):
     # 根据请求中的hand_type决定使用哪个机械手
-    if len(req.positions) != 6:
-            rospy.logerr("DH hand requires exactly 6 positions")
-            return DH5SetPositionResponse(-1)
-    
-    if req.hand_type == 'right': # RIGHT hand
+    if len(req.position_list) != 6 and req.hand_mode == 'hand':
+        rospy.logerr("DH hand requires exactly 6 positions")
+        return DH5SetPositionResponse(-1)
+    if req.gripper_state not in ['open', 'close'] and req.hand_mode == 'gripper':
+        rospy.logerr(f"Invalid gripper state: {req.gripper_state}")
+        return DH5SetPositionResponse(-1)
+    if req.hand_type == 'right' and req.hand_mode == 'hand': # RIGHT hand
         rospy.loginfo("Setting positions for RIGHT hand")
-        result = api_r.set_all_position(req.positions)
-    elif req.hand_type == 'left': # LEFT hand
+        result = api_r.set_all(req.position_list, 
+                               axis_list=req.axis_list,
+                               force_list=req.force_list,
+                               speed_list=req.speed_list,
+                               acc_list=req.acc_list)
+    elif req.hand_type == 'left' and req.hand_mode == 'hand': # LEFT hand
         rospy.loginfo("Setting positions for LEFT hand")
-        result = api_l.set_all_position(req.positions)
+        result = api_l.set_all(req.position_list, 
+                               axis_list=req.axis_list,
+                               force_list=req.force_list,
+                               speed_list=req.speed_list,
+                               acc_list=req.acc_list)
+    elif req.hand_type == 'right' and req.hand_mode == 'gripper': # RIGHT hand
+        rospy.loginfo(f"Setting RIGHT gripper-hand: {req.gripper_state}")
+        result = api_r.gripper(req.gripper_state)
+    elif req.hand_type == 'left' and req.hand_mode == 'gripper': # LEFT hand
+        rospy.loginfo(f"Setting LEFT gripper-hand: {req.gripper_state}")
+        result = api_l.gripper(req.gripper_state)
     else:
-        rospy.logerr(f"Invalid hand_type: {req.hand_type}")
+        rospy.logerr(f"Invalid hand_type | hand_mode: {req.hand_type} | {req.hand_mode}")
         return DH5SetPositionResponse(-1)
     
     if result == DH5ModbusAPI.SUCCESS:
@@ -477,6 +517,10 @@ def shutdown_hook():
     api_l.close_connection()
 
 if __name__ == '__main__':
+    """
+    sudo chmod 666 /dev/ttyUSB0
+    sudo chmod 666 /dev/ttyUSB1
+    """
     # 初始化ROS节点
     rospy.init_node('dh5_hand_controller')
     
