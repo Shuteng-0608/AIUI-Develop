@@ -1,0 +1,33 @@
+<launch>
+    <!-- 启动 TTS 节点 -->
+    <node 
+        pkg="aiui" 
+        type="aiui_tts_service_node.py" 
+        name="aiui_tts_service_node" 
+        output="screen"
+    />
+
+    <!-- 启动 VLM 节点 -->
+    
+    <node 
+        pkg="aiui" 
+        type="vlm_service_node.py"
+        name="vlm_service_node" 
+        output="screen"
+    />
+
+    <!-- 启动 VLM 节点 -->
+    
+    <node 
+        pkg="aiui" 
+        type="dh5_control_ros.py"
+        name="dh5_service_node" 
+        output="screen"
+    />
+    
+    <!-- 启动 OrbbecSDK_ROS1 节点 -->
+    <!-- <include file="$(find orbbec_camera)/launch/gemini_330_series.launch" /> -->
+    <!-- <include file="$(find OrbbecSDK_ROS1)/launch/gemini_330_series.launch" /> -->
+    <!-- <include file="/home/whc/camera_ws/src/OrbbecSDK_ROS1/launch/gemini_330_series.launch" /> -->
+    
+</launch>
