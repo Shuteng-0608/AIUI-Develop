@@ -210,11 +210,13 @@ class DH5ModbusAPI:
             if axis < 1 or axis > 6:
                 return self.ERROR_INVALID_COMMAND
         register_address = 0x0101
+        
         if self.port == '/dev/ttyUSB0':
             # Right hand
             position_list = self.clamp_list(position_list, position_limits_right)
         if self.port == '/dev/ttyUSB1':
             # Left hand
+            position_list = self.err_comp(position_list)
             position_list = self.clamp_list(position_list, position_limits_left)
 
         return self.send_modbus_command(function_code=0x10,
@@ -282,7 +284,7 @@ class DH5ModbusAPI:
                                         data=force_list,
                                         data_length=len(axis_list))
 
-    def set_all(self, axis_list, position_list, force_list, speed_list,  acc_list):
+    def set_all(self, position_list, axis_list=None, force_list=None, speed_list=None, acc_list=None):
         """
         设置所有关节的目标位置、速度、力、加速度
         :param axis_list: 关节列表
@@ -292,6 +294,14 @@ class DH5ModbusAPI:
         :param acc_list: 加速度列表
         :return:
         """
+        if axis_list is None:
+            axis_list = [1, 2, 3, 4, 5, 6]
+        if force_list is None:
+            force_list = [100, 100, 100, 100, 100, 100]
+        if speed_list is None:
+            speed_list = [100, 100, 100, 100, 100, 100]
+        if acc_list is None:
+            acc_list = [100, 100, 100, 100, 100, 100]
         for axis in axis_list:
             if axis < 1 or axis > 6:
                 return self.ERROR_INVALID_COMMAND
@@ -299,10 +309,18 @@ class DH5ModbusAPI:
         force_register_address = 0x0107
         speed_register_address = 0x010D
         acc_register_address = 0x0113
+
+        if self.port == '/dev/ttyUSB0':
+            # Right hand
+            position_list = self.clamp_list(position_list, position_limits_right)
+        if self.port == '/dev/ttyUSB1':
+            # Left hand
+            # position_list = self.err_comp(position_list)
+            position_list = self.clamp_list(self.err_comp(position_list), position_limits_left)
         complete_list = position_list + force_list + speed_list + acc_list
         return self.send_modbus_command(function_code=0x10,
                                         register_address=position_register_address,
-                                        data=position_list,
+                                        data=complete_list,
                                         data_length=len(complete_list))
 
     def get_all_feedback(self):
@@ -427,9 +445,12 @@ class DH5ModbusAPI:
         if gesture not in gesture_list:
             return self.ERROR_INVALID_COMMAND
         if self.port == '/dev/ttyUSB1':
-            self.set_all_position(self.err_comp(gesture_list["FIVE"]))
+            # self.set_all_position(self.err_comp(gesture_list["FIVE"]))
+            # time.sleep(0.5)
+            # self.set_all_position(self.err_comp(gesture_list[gesture]))
+            self.set_all_position(gesture_list["FIVE"])
             time.sleep(0.5)
-            self.set_all_position(self.err_comp(gesture_list[gesture]))
+            self.set_all_position(gesture_list[gesture])
         if self.port == '/dev/ttyUSB0':
             self.set_all_position(gesture_list["FIVE"])
             time.sleep(0.5)
@@ -473,7 +494,10 @@ def grab():
 
 
 if __name__ == '__main__':
-
+    """
+    sudo chmod 666 /dev/ttyUSB0
+    sudo chmod 666 /dev/ttyUSB1
+    """
     # RIGHT   [930, 1771, 1707, 1731, 1731, 981]
     gesture_list = {
         "ONE": [30, 1770, 30, 30, 30, 825],
@@ -552,6 +576,14 @@ if __name__ == '__main__':
     print("LEFT 运行速度:", l_parsed_data['speed'])
     print("LEFT 当前电流:", l_parsed_data['current'])
     # sync_demo()
+    # api_l.set_all([930, 1770, 30, 30, 1730, 980], speed_list=[30, 30, 30, 30, 30, 30])
+
+    # ============================== #
+    
+    # == CLOSE == #
+    api_r.set_all([300, 500, 500, 500, 500, 400], speed_list=[100, 30, 30, 30, 30, 30])
+    # == OPEN == #
+    api_r.set_all([930, 1770, 1707, 1730, 1730, 980], speed_list=[30, 30, 30, 30, 30, 30])
    
 
 
