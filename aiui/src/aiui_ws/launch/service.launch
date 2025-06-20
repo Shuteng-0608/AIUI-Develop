@@ -16,12 +16,21 @@
         output="screen"
     />
 
-    <!-- 启动 VLM 节点 -->
+    <!-- 启动 DH5 节点 -->
     
     <node 
         pkg="aiui" 
         type="dh5_control_ros.py"
         name="dh5_service_node" 
+        output="screen"
+    />
+
+    <!-- 启动 VLA 节点 -->
+    
+    <node 
+        pkg="aiui" 
+        type="vla_service_node.py"
+        name="vla_service_node" 
         output="screen"
     />
     
