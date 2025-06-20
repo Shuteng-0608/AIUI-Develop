@@ -474,7 +474,32 @@ class DH5ModbusAPI:
 
 def handle_set_position(req):
     # 根据请求中的hand_type决定使用哪个机械手
-    if len(req.position_list) != 6 and req.hand_mode == 'hand':
+    if req.hand_type == "both":
+        rospy.loginfo("Setting positions for BOTH hand")
+        threads = [
+            threading.Thread(target=api_r.set_all, 
+                             kwargs={
+                                'position_list': req.right_position_list,
+                                'axis_list': req.right_axis_list,
+                                'speed_list': req.right_speed_list,
+                                'acc_list': req.right_acc_list,
+                                'force_list': req.right_force_list
+                            }),
+            threading.Thread(target=api_l.set_all, 
+                             kwargs={
+                                'position_list': req.left_position_list,
+                                'axis_list': req.left_axis_list,
+                                'speed_list': req.left_speed_list,
+                                'acc_list': req.left_acc_list,
+                                'force_list': req.left_force_list
+                            }),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        return DH5SetPositionResponse(0)
+    if len(req.right_position_list) != 6 and req.hand_mode == 'hand':
         rospy.logerr("DH hand requires exactly 6 positions")
         return DH5SetPositionResponse(-1)
     if req.gripper_state not in ['open', 'close'] and req.hand_mode == 'gripper':
@@ -482,18 +507,19 @@ def handle_set_position(req):
         return DH5SetPositionResponse(-1)
     if req.hand_type == 'right' and req.hand_mode == 'hand': # RIGHT hand
         rospy.loginfo("Setting positions for RIGHT hand")
-        result = api_r.set_all(req.position_list, 
-                               axis_list=req.axis_list,
-                               force_list=req.force_list,
-                               speed_list=req.speed_list,
-                               acc_list=req.acc_list)
+        result = api_r.set_all(req.right_position_list, 
+                               axis_list=req.right_axis_list,
+                               force_list=req.right_force_list,
+                               speed_list=req.right_speed_list,
+                               acc_list=req.right_acc_list)
+        
     elif req.hand_type == 'left' and req.hand_mode == 'hand': # LEFT hand
         rospy.loginfo("Setting positions for LEFT hand")
-        result = api_l.set_all(req.position_list, 
-                               axis_list=req.axis_list,
-                               force_list=req.force_list,
-                               speed_list=req.speed_list,
-                               acc_list=req.acc_list)
+        result = api_l.set_all(req.left_position_list, 
+                               axis_list=req.left_axis_list,
+                               force_list=req.left_force_list,
+                               speed_list=req.left_speed_list,
+                               acc_list=req.left_acc_list)
     elif req.hand_type == 'right' and req.hand_mode == 'gripper': # RIGHT hand
         rospy.loginfo(f"Setting RIGHT gripper-hand: {req.gripper_state}")
         result = api_r.gripper(req.gripper_state)

@@ -15,6 +15,11 @@ from aiui.srv import VLMProcess, VLMProcessRequest, VLMProcessResponse
 from aiui.srv import StringService, StringServiceRequest, StringServiceResponse
 from aiui.srv import DH5SetPosition, DH5SetPositionRequest, DH5SetPositionResponse
 from std_msgs.msg import String
+import cv2
+from cv_bridge import CvBridge
+from sensor_msgs.msg import Image
+import numpy as np
+import pygame
 
 def stop_handle(sig, frame):
     global run
@@ -63,6 +68,11 @@ class SocketDemo(Thread):
         self.vlm_client = rospy.ServiceProxy("vlm_service",VLMProcess)
         self.tts_client = rospy.ServiceProxy("tts_service",TTS)
         self.dh5_client = rospy.ServiceProxy("/dh5/set_all_position",DH5SetPosition)
+        self.pending_response = []  # 暂存中间段(状态1)的文本
+        self.current_response = ""  # 当前拼接中的完整回复
+        self.seen_status_0 = False  # 标记是否见过状态0
+        self.vlm_state = False  # VLM状态标志
+        self.vlm_text = ""  # VLM文本
 
 
 
@@ -175,7 +185,7 @@ class SocketDemo(Thread):
         if intent == "SayHi":
             rospy.loginfo(f"检测到 [{intent}] 意图, 执行打招呼动作")
             # client = rospy.ServiceProxy("cmd_str_srv",StringService)
-            # self.arm_client = rospy.ServiceProxy("cmd_str_srv",StringService)
+            # self.arm_client = rospy.ServiceProxy("/aris_node/cmd_str_srv",StringService)
             req = StringServiceRequest()
             req.request = '3'
             self.arm_client.wait_for_service()
@@ -190,11 +200,12 @@ class SocketDemo(Thread):
             req.request = '4' # TODO
             self.arm_client.wait_for_service()
 
-            dh5_req = DH5SetPositionRequest()
-            dh5_req.hand_type = 'right'  # 1 for right hand, 2 for left hand
-            dh5_req.position_list = [800, 1500, 1500, 1500, 1500, 800]  # TODO for handshake position
-            self.dh5_client.wait_for_service()
-            Thread(target=self.dh5_client.call, args=(dh5_req,), daemon=True).start()
+            # dh5_req = DH5SetPositionRequest()
+            # dh5_req.hand_type = 'right'  # 1 for right hand, 2 for left hand
+            # dh5_req.position_list = [800, 1500, 1500, 1500, 1500, 800]  # TODO for handshake position
+            # dh5_req.hand_mode = 'hand'
+            # self.dh5_client.wait_for_service()
+            # Thread(target=self.dh5_client.call, args=(dh5_req,), daemon=True).start()
             Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
 
             # client.close()
@@ -210,7 +221,6 @@ class SocketDemo(Thread):
             req = StringServiceRequest()
             req.request = '5' # TODO
             self.arm_client.wait_for_service()
-            # self.arm_client.call(req)
             Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
 
  
@@ -223,9 +233,16 @@ class SocketDemo(Thread):
         #     # self.arm_client.call(req)
         #     Thread(target=self.arm_client.call, args=(req,), daemon=True).start()
         elif intent == "vlm":
+            self.vlm_state = True
+            self.tts_text = "好的，让我仔细看一下"
+            req = TTSRequest()
+            req.request = self.tts_text
+            self.tts_client.wait_for_service()
+            Thread(target=self.tts_client.call, args=(req,), daemon=True).start()
+
             rospy.loginfo(f"检测到 [{intent}] 意图, 执行描述动作")
             vlm_req = VLMProcessRequest()
-            vlm_req.prompt = self.tts_text 
+            vlm_req.prompt = self.vlm_text
             self.vlm_client.wait_for_service()
             resp = self.vlm_client.call(vlm_req)
             vlm_result = resp.vlm_result
@@ -237,8 +254,107 @@ class SocketDemo(Thread):
             req.request = vlm_result
             self.tts_client.wait_for_service()
             self.tts_client.call(req)
-            
 
+        elif intent == "self_photo":
+            self.vlm_state = True
+            rospy.loginfo(f"检测到 [{intent}] 意图, 执行自拍动作")
+            tts_req = TTSRequest()
+            tts_req.request = "好的，摆个点赞的姿势，来和我自拍一张吧"
+            self.tts_client.wait_for_service()
+            self.tts_client.call(tts_req)
+            arm_req = StringServiceRequest()
+            arm_req.request = '6'
+            self.arm_client.wait_for_service()
+            Thread(target=self.arm_client.call, args=(arm_req,), daemon=True).start()
+
+        elif intent == "take_photo":
+            self.vlm_state = True
+            rospy.loginfo(f"检测到 [{intent}] 意图, 执行拍照动作")
+            tts_req = TTSRequest()
+            tts_req.request = "好的，没问题，大家都过来吧！站到我面前，让我来为大家拍一张大合照！"
+            self.tts_client.wait_for_service()
+            self.tts_client.call(tts_req)
+            arm_req = StringServiceRequest()
+            arm_req.request = '7'
+            self.arm_client.wait_for_service()
+            Thread(target=self.arm_client.call, args=(arm_req,), daemon=True).start()
+
+            bridge = CvBridge()
+    
+            try:
+                rospy.sleep(0.8)
+                self.play_audio("/home/whc/aiui_ws/src/aiui/audio/look_at_me.mp3")
+                # rospy.sleep(2)
+                self.play_audio("/home/whc/aiui_ws/src/aiui/audio/get_ready.mp3")
+                # rospy.sleep(2)
+                self.play_audio("/home/whc/aiui_ws/src/aiui/audio/pose.mp3")
+                # rospy.sleep(2)
+                self.play_audio("/home/whc/aiui_ws/src/aiui/audio/three.mp3")
+                rospy.sleep(1.5)
+                self.play_audio("/home/whc/aiui_ws/src/aiui/audio/two.mp3")
+                rospy.sleep(1.5)
+                self.play_audio("/home/whc/aiui_ws/src/aiui/audio/one.mp3")
+                rospy.sleep(2.5)
+                self.play_audio("/home/whc/aiui_ws/src/aiui/audio/qie_zi.mp3")
+                # rospy.sleep(2)
+
+                
+                
+                
+                
+                
+                
+                # 等待并获取ROS图像消息
+                rospy.loginfo("等待相机图像消息...")
+                image_msg = rospy.wait_for_message("/camera/color/image_raw", Image, timeout=5.0)
+                
+                # 将ROS图像消息转换为OpenCV格式
+                cv_image = bridge.imgmsg_to_cv2(image_msg, "bgr8")
+                rospy.loginfo("成功获取图像!")
+                
+                # 保存图像
+                cv2.imwrite("captured_image.jpg", cv_image)
+                rospy.loginfo("图像已保存为 captured_image.jpg")
+                
+                # 创建全屏窗口显示图像
+                screen_width, screen_height = 1920, 1080  # 根据实际屏幕分辨率调整
+                window_name = "Fullscreen Image"
+                cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
+                cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+                
+                # 调整图像尺寸以适应屏幕（保持宽高比）
+                h, w = cv_image.shape[:2]
+                scale = min(screen_width/w, screen_height/h)
+                resized_image = cv2.resize(cv_image, (int(w*scale), int(h*scale)))
+                
+                # 创建黑色背景并在中央显示图像
+                display_image = np.zeros((screen_height, screen_width, 3), dtype=np.uint8)
+                x_offset = (screen_width - resized_image.shape[1]) // 2
+                y_offset = (screen_height - resized_image.shape[0]) // 2
+                display_image[y_offset:y_offset+resized_image.shape[0], 
+                            x_offset:x_offset+resized_image.shape[1]] = resized_image
+                
+                # 显示图像
+                cv2.imshow(window_name, display_image)
+                rospy.loginfo("按任意键退出全屏显示...")
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+                
+            except rospy.ROSException:
+                rospy.logerr("等待图像消息超时，请检查相机是否已启动")
+            except Exception as e:
+                rospy.logerr(f"发生错误: {str(e)}")
+
+
+        
+        
+            
+    def play_audio(self, file_path):
+        pygame.mixer.init()
+        pygame.mixer.music.load(file_path)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():  # 等待播放结束
+            pygame.time.Clock().tick(10)
 
 
     def get_nlp_result(self, data):
@@ -251,45 +367,105 @@ class SocketDemo(Thread):
 
         if text_value is not None and status_value is not None:
             rospy.loginfo(f"大模型回答结果是: {text_value}  {status_value}")
-        
-            parsed_data = json.loads(text_value)
+        # 状态0: 新响应开始
+        if status_value == 0:
+            # 重置之前的进度
+            self.current_response = text_value
+            self.pending_response = []
+            self.seen_status_0 = True
+            rospy.loginfo(f"新响应开始: {text_value}")
 
-            if not isinstance(parsed_data, dict):
-                rospy.logerr("解析后的数据不是字典格式")
+        # 状态1: 中间段落
+        elif status_value == 1:
+            if not self.seen_status_0:
+                rospy.logwarn("收到状态1但未收到初始状态0, 忽略")
                 return
+            self.pending_response.append(text_value)
 
-            try:
-                self.tts_text = parsed_data.get('intent', {}).get('answer',{}).get('text')
-            except (IndexError, AttributeError, TypeError, KeyError) as e:
-                # self.detected_intent = None
-                self.tts_text = ""
-                rospy.logerr(f"语义解析小异常: {str(e)}")
-
-            try:
-                self.detected_intent = parsed_data.get('intent', {}).get('semantic', {})[0].get('intent', {})
-            except (IndexError, AttributeError, TypeError, KeyError) as e:
-                self.detected_intent = None
-                rospy.logwarn(f"无意图: {str(e)}")
-            
-            if self.tts_text:
-                rospy.loginfo(f"成功提取回答: {self.tts_text}")
-                # client = rospy.ServiceProxy("tts_service",TTS)
+        # 状态2: 最终段落
+        elif status_value == 2:
+            # if not self.seen_status_0:
+            #     rospy.logwarn("收到状态2但未收到初始状态0, 忽略")
+            #     return
+            # 拼接所有中间段落 + 最后段落
+            full_text = self.current_response + "".join(self.pending_response) + text_value
+            rospy.loginfo(f"最终完整响应: {full_text}")
+            self.tts_text = full_text
+            if self.tts_text and self.vlm_state == False:
                 req = TTSRequest()
                 req.request = self.tts_text
                 self.tts_client.wait_for_service()
-
-                # self.arm_client.call(req)
                 Thread(target=self.tts_client.call, args=(req,), daemon=True).start()
-                # client.close()
+            if self.vlm_state == True:
+                self.vlm_state = False
 
-            else:
-                rospy.logerr(f"未成功提取回答")
+            # 重置状态
+            self.current_response = ""
+            self.pending_response = []
+            self.seen_status_0 = False
+            return full_text
+        
+            # # parsed_data = json.loads(text_value)
+            # # ============================================================================== #
+            # if type(text_value) == 'str':
+            #     rospy.loginfo(f"接收到的 text_value 是字符串: {text_value}")
+                
+            # try:
+            #     parsed_data = json.loads(text_value)  # 尝试解析JSON
+            # except json.JSONDecodeError as e:  # 捕获JSON解析错误
+            #     # 处理解析失败的情况（例如记录错误/返回默认值）
+            #     print(f"JSON解析失败: {e}")
+            #     parsed_data = None  # 或 {} / [] 根据预期结构
+            # except TypeError as e:  # 捕获非字符串输入
+            #     print(f"输入类型错误: {e}")
+            #     parsed_data = None
+            # except Exception as e:  # 可选：处理其他未知异常
+            #     print(f"未知错误: {e}")
+            #     parsed_data = None
+            # if parsed_data is None:
+            #     rospy.logerr("解析后的数据为 None")
+            #     rospy.logwarn(f"解析前 text_value 的数据: {text_value}")
+            #     rospy.logwarn(f"解析前 text_value 的数据类型为: {type(text_value)}")
+            #     return
+            # # ============================================================================== #
+           
 
-            if self.detected_intent:
-                rospy.loginfo(f"成功提取意图: {self.detected_intent}")
-                self.handle_detected_intent(self.detected_intent)
-            else:
-                rospy.logwarn("未检测到预设动作指令意图")
+            # if not isinstance(parsed_data, dict):
+            #     rospy.logerr("解析后的数据不是字典格式")
+            #     return
+
+            # try:
+            #     self.tts_text = parsed_data.get('intent', {}).get('answer',{}).get('text')
+            # except (IndexError, AttributeError, TypeError, KeyError) as e:
+            #     # self.detected_intent = None
+            #     self.tts_text = ""
+            #     rospy.logerr(f"语义解析小异常: {str(e)}")
+
+            # try:
+            #     self.detected_intent = parsed_data.get('intent', {}).get('semantic', {})[0].get('intent', {})
+            # except (IndexError, AttributeError, TypeError, KeyError) as e:
+            #     self.detected_intent = None
+            #     rospy.logwarn(f"无意图: {str(e)}")
+            
+            # if self.tts_text:
+            #     rospy.loginfo(f"成功提取回答: {self.tts_text}")
+            #     # client = rospy.ServiceProxy("tts_service",TTS)
+            #     req = TTSRequest()
+            #     req.request = self.tts_text
+            #     self.tts_client.wait_for_service()
+
+            #     # self.arm_client.call(req)
+            #     Thread(target=self.tts_client.call, args=(req,), daemon=True).start()
+            #     # client.close()
+
+            # else:
+            #     rospy.logerr(f"未成功提取回答")
+
+            # if self.detected_intent:
+            #     rospy.loginfo(f"成功提取意图: {self.detected_intent}")
+            #     self.handle_detected_intent(self.detected_intent)
+            # else:
+            #     rospy.logwarn("未检测到预设动作指令意图")
 
             
 
@@ -297,11 +473,34 @@ class SocketDemo(Thread):
         # intent_data = data.get('content', {}).get('result', {}).get()
         text_value = data.get('content', {}).get(
             'result', {}).get('cbm_semantic', {}).get('text')
+        rospy.loginfo(f"技能 text_value: {text_value} ")
+        # self.vlm_text = data.get('content', {}).get('result', {}).get('cbm_semantic', {}).get('text').get('semantic', {}).get('template')
+        # print(f"技能 VLM 文本: {self.vlm_text} ")
         intent = json.loads(text_value)
         rc = intent['rc']
         if (rc == 0):
             category = intent.get('category', "")
             rospy.loginfo(f"技能结果: {category} ")
+        parsed_data = json.loads(text_value)
+        if not isinstance(parsed_data, dict):
+            rospy.logerr("解析后的数据不是字典格式")
+            return
+        try:
+            self.vlm_text = parsed_data.get('semantic', {})[0].get('template', "")
+        except (IndexError, AttributeError, TypeError, KeyError) as e:
+            self.vlm_text = ""
+            rospy.logerr(f"语义vlm解析小异常: {str(e)}")
+        try:
+            self.detected_intent = parsed_data.get('semantic', {})[0].get('intent', {})
+
+        except (IndexError, AttributeError, TypeError, KeyError) as e:
+            self.detected_intent = None
+            rospy.logwarn(f"无意图: {str(e)}")
+        if self.detected_intent:
+            rospy.loginfo(f"成功提取意图: {self.detected_intent}")
+            self.handle_detected_intent(self.detected_intent)
+        else:
+            rospy.logwarn("未检测到预设动作指令意图")
 
     def run(self):
         try:

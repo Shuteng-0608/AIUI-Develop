@@ -41,7 +41,8 @@ class VLMServiceServer:
             return VLMProcessResponse(error_msg)
 
         # 发送请求到VLM API
-        payload = {"image": encoded_image, "prompt": req.prompt}
+        # language = "用中文回答我"
+        payload = {"image": encoded_image, "prompt": req.prompt }
         try:
             response = requests.post(self.api_url, json=payload, timeout=10)
             if response.ok:

@@ -172,11 +172,13 @@ def handle_tts_request(req):
             "tts_res_type": "url",
             "context": "{{\\\"sdk_support\\\":[\\\"iat\\\",\\\"nlp\\\",\\\"tts\\\"]}}"
         }}"""
+        # "vcn": "x4_lingxiaoxuan_oral",
         
         param_tts = """{{
             "auth_id": "{0}",
             "data_type": "text",
-            "vcn": "x4_lingxiaoxuan_oral",
+            "vcn": "x4_lingfeizhe_oral",
+            "speed": "50",
             "scene": "IFLYTEK.tts",
             "tts_res_type": "url",
             "context": "{{\\\"sdk_support\\\":[\\\"tts\\\"]}}"
